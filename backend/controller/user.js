@@ -16,10 +16,16 @@ const signUpSchema = z.object({
     lastname: z.string()
 })
 
+const updateProfileSchema = z.object({
+    firstname: z.string().optional(),
+    lastname: z.string().optional(),
+    password: z.string().optional(),
+})
+
 const signIn = async (req, res, next) => {
     try {
-        const {success} = signInSchema.safeParse(req.body);
-        if(!success){
+        const { success } = signInSchema.safeParse(req.body);
+        if (!success) {
             return res.status(411).json({ success: false, message: 'Required Field missing' });
         }
         const { username, password } = req.body;
@@ -43,8 +49,8 @@ const signIn = async (req, res, next) => {
 }
 const signUp = async (req, res, next) => {
     try {
-        const {success} = signUpSchema.safeParse(req.body);
-        if(!success){
+        const { success } = signUpSchema.safeParse(req.body);
+        if (!success) {
             return res.status(411).json({ success: false, message: 'Required Field missing' });
         }
         const { firstname, lastname, password, username } = req.body;
@@ -52,7 +58,7 @@ const signUp = async (req, res, next) => {
         if (existingUser) {
             return res.status(400).json({ success: false, message: 'user already exists' });
         }
-        const hashedPassword = bcrypt.hash(password,saltRounds)
+        const hashedPassword = bcrypt.hash(password, saltRounds)
         const newUser = User({
             firstname,
             lastname,
@@ -60,13 +66,65 @@ const signUp = async (req, res, next) => {
             password: hashedPassword
         })
         const user = newUser.save();
-        return res.status(200).json({ success: true, message: 'user created successfully' });
+        const userId = user._id;
+        await Account.create({
+            userId,
+            balance: 1 + Math.random() * 10000
+        })
+        const token = jwt.sign({
+            username: user.username, id: user._id
+        }, JWT_SECRET);
+
+        return res.status(200).json({ success: true, token: token, message: 'user created successfully' });
     } catch (error) {
         return res.status(500).json({ success: false, message: 'internal server error' });
-        
+
     }
 
 }
-const updateProfile = async () => { }
+const updateProfile = async (req, res, next) => {
+    try {
+        const { success } = updateProfileSchema.safeParse(req.body);
+        if (!success) {
+            res.status(411).json({ success: false, message: 'Required field missing' })
+        }
+        const user = User.findAndUpdateOne({ _id: req.user.id }, req.body);
+        res.status(200).json({ success: true, message: 'User updated successfully' })
+    } catch (error) {
+        return res.status(500).json({ success: false, message: 'Internal server error' });
+    }
+}
+const getUsers = async (req, res, next) => {
+    try {
+        const { filter } = req.body || req.params || req.query;
+        const lstUser = User.find({
+            $or: [
+                {
+                    firstname: {
+                        $regex: filter
+                    },
+                },
+                {
+                    lastname: {
+                        $regex: filter
+                    },
+                }
+            ]
+        });
+
+        res.status(200).json({
+            success: true,
+            message: 'Users fetched successfully',
+            user: users.map(user => ({
+                username: user.username,
+                firstName: user.firstName,
+                lastName: user.lastName,
+                _id: user._id
+            }))
+        })
+    } catch (error) {
+        return res.status(500).json({ success: false, message: 'Internal server error' });
+    }
+}
 
 module.exports = { signIn, signUp, updateProfile };
