@@ -2,6 +2,8 @@ const User = require('../model/user');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const z = require('zod');
+const Account = require('../model/account');
+const { JWT_SECRET } = require('../config');
 
 const saltRounds = 12;
 
@@ -29,7 +31,7 @@ const signIn = async (req, res, next) => {
             return res.status(411).json({ success: false, message: 'Required Field missing' });
         }
         const { username, password } = req.body;
-        const user = await User.find({ username: username });
+        const user = await User.findOne({ username: username });
         if (!user) {
             return res.status(400).json({ success: false, message: 'user not found' });
         }
@@ -41,8 +43,9 @@ const signIn = async (req, res, next) => {
         const newUser = user.toObject();
         delete user.password;
         newUser.token = token;
-        return res.status(200).json({ success: true, message: 'user logged in successfully' })
+        return res.status(200).json({ success: true, token: token ,message: 'user logged in successfully' })
     } catch (error) {
+        console.log(error);
         return res.status(500).json({ success: false, message: 'internal server error' });
     }
 
@@ -54,22 +57,22 @@ const signUp = async (req, res, next) => {
             return res.status(411).json({ success: false, message: 'Required Field missing' });
         }
         const { firstname, lastname, password, username } = req.body;
-        const existingUser = User.findOne({ username: username })
+        const existingUser = await User.findOne({ username: username })
         if (existingUser) {
             return res.status(400).json({ success: false, message: 'user already exists' });
         }
-        const hashedPassword = bcrypt.hash(password, saltRounds)
+        const hashedPassword = await bcrypt.hash(password, saltRounds)
         const newUser = User({
             firstname,
             lastname,
             username,
             password: hashedPassword
         })
-        const user = newUser.save();
+        const user = await newUser.save();
         const userId = user._id;
         await Account.create({
             userId,
-            balance: 1 + Math.random() * 10000
+            balance: Math.trunc(1 + Math.random() * 10000)
         })
         const token = jwt.sign({
             username: user.username, id: user._id
@@ -77,7 +80,8 @@ const signUp = async (req, res, next) => {
 
         return res.status(200).json({ success: true, token: token, message: 'user created successfully' });
     } catch (error) {
-        return res.status(500).json({ success: false, message: 'internal server error' });
+        console.log(error);
+        return res.status(500).json({ data: error, success: false, message: 'internal server error' });
 
     }
 
@@ -96,8 +100,8 @@ const updateProfile = async (req, res, next) => {
 }
 const getUsers = async (req, res, next) => {
     try {
-        const { filter } = req.body || req.params || req.query;
-        const lstUser = User.find({
+        const filter  = req.query.filter || "";
+        const lstUser = await User.find({
             $or: [
                 {
                     firstname: {
@@ -115,16 +119,17 @@ const getUsers = async (req, res, next) => {
         res.status(200).json({
             success: true,
             message: 'Users fetched successfully',
-            user: users.map(user => ({
+            user: lstUser.map(user => ({
                 username: user.username,
-                firstName: user.firstName,
-                lastName: user.lastName,
+                firstname: user.firstname,
+                lastname: user.lastname,
                 _id: user._id
             }))
         })
     } catch (error) {
+        console.log(error);
         return res.status(500).json({ success: false, message: 'Internal server error' });
     }
 }
 
-module.exports = { signIn, signUp, updateProfile };
+module.exports = { signIn, signUp, updateProfile , getUsers };

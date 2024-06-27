@@ -12,7 +12,7 @@ function authMiddleware(req,res,next){
         if(!success){
             return res.status(403).json({success: false, message: 'No token found'})
         }
-        const token = req.headerSchema.authorization.split(' ')[1];
+        const token = req.headers.authorization.split(' ')[1];
         if(!token){
             return res.status(403).json({success: false, message: 'No token found'})
         }
@@ -23,6 +23,7 @@ function authMiddleware(req,res,next){
         req.user = decodedUser
         next();
     } catch (error) {
+        console.log(error)
         return res.status(500).json({success: false, message: 'internal server error'})
     }
 }
